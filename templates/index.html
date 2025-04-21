@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宿題サポートくん</title>
+    <style>
+        body {
+            font-family: 'Hiragino Kaku Gothic ProN', 'メイリオ', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f7f7f7;
+        }
+        .container {
+            background-color: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #ff8000;
+            text-align: center;
+            font-size: 28px;
+        }
+        .chat-container {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background-color: #fcfcfc;
+        }
+        .message-container {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+        .user-message-container {
+            flex-direction: row-reverse;
+        }
+        .character-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+            margin-left: 10px;
+        }
+        .message {
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: #ffebcd;
+        }
+        .assistant-message {
+            background-color: #e3f2fd;
+        }
+        .input-area {
+            display: flex;
+            margin-top: 15px;
+        }
+        #user-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ff8000;
+            border-radius: 25px;
+            font-size: 16px;
+        }
+        #send-button {
+            background-color: #ff8000;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            padding: 12px 20px;
+            margin-left: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        #send-button:hover {
+            background-color: #e67300;
+        }
+        .loading {
+            text-align: center;
+            margin: 10px 0;
+            font-style: italic;
+            color: #888;
+        }
+        .character {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        .character img {
+            width: 120px;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="character">
+            <img src="static/robot.jpeg" alt="ロボット先生" style="width: 100px; height: 100px; border-radius: 50%;">
+            <h1>宿題サポートくん</h1>
+        </div>
+        
+        <div class="chat-container" id="chat-container">
+            <!-- メッセージがここに追加されていく -->
+        </div>
+        
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="宿題の質問を入力してね...">
+            <button id="send-button">送信</button>
+        </div>
+    </div>
+
+    <script>
+        // 変数初期化
+        let sessionId = null;
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        
+        // 初期化関数
+        async function initialize() {
+            try {
+                // セッション開始
+                const response = await fetch('/api/start-session', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                sessionId = data.session_id;
+                
+                // 初期メッセージ
+                addMessage('こんにちは！宿題で分からんことあったら、なんでも聞いてな！', false);
+            } catch (error) {
+                console.error('エラー:', error);
+                addMessage('すまんな、エラーが発生してもうたわ。ページを更新してみてな！', false);
+            }
+        }
+        
+        // メッセージ表示関数
+        function addMessage(text, isUser) {
+            // コンテナ作成
+            const container = document.createElement('div');
+            container.className = isUser ? 'message-container user-message-container' : 'message-container';
+            
+            // キャラクターアイコン
+            const icon = document.createElement('img');
+            icon.className = 'character-icon';
+            icon.src = isUser ? 'static/kids.jpeg' : 'static/robot.jpeg';
+            icon.alt = isUser ? 'ゆうちゃん' : 'ロボット先生';
+            
+            // メッセージ
+            const message = document.createElement('div');
+            message.className = isUser ? 'message user-message' : 'message assistant-message';
+            message.textContent = text;
+            
+            // 追加
+            container.appendChild(icon);
+            container.appendChild(message);
+            chatContainer.appendChild(container);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // ローディング表示
+        function showLoading() {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading';
+            loadingDiv.id = 'loading';
+            loadingDiv.textContent = '考え中やで...';
+            chatContainer.appendChild(loadingDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // ローディング非表示
+        function hideLoading() {
+            const loadingDiv = document.getElementById('loading');
+            if (loadingDiv) {
+                loadingDiv.remove();
+            }
+        }
+        
+        // 質問送信関数
+        async function sendQuestion() {
+            const question = userInput.value.trim();
+            if (!question || !sessionId) return;
+            
+            // 入力欄クリア
+            userInput.value = '';
+            
+            // ユーザーメッセージ表示
+            addMessage(question, true);
+            
+            // ローディング表示
+            showLoading();
+            
+            try {
+                // 質問送信
+                const response = await fetch('/api/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        question: question
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // ローディング非表示
+                hideLoading();
+                
+                if (data.error) {
+                    addMessage(`すまんな、エラーが発生してもうたわ: ${data.error}`, false);
+                } else {
+                    // 回答表示
+                    addMessage(data.answer, false);
+                }
+                
+            } catch (error) {
+                console.error('エラー:', error);
+                hideLoading();
+                addMessage('すまんな、エラーが発生してもうたわ。もう一回試してみてな！', false);
+            }
+        }
+        
+        // イベントリスナー設定
+        sendButton.addEventListener('click', sendQuestion);
+        
+        // Enterキーでも送信可能
+        userInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendQuestion();
+            }
+        });
+        
+        // 初期化実行
+        initialize();
+    </script>
+</body>
+</html>
